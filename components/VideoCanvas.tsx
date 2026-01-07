@@ -15,7 +15,7 @@ interface VideoCanvasProps {
 export interface VideoCanvasHandle {
   seek: (time: number) => void;
   startRecording: () => void;
-  stopRecording: () => Promise<Blob>;
+  stopRecording: () => Promise<{ blob: Blob; extension: string }>;
 }
 
 const VideoCanvas = forwardRef<VideoCanvasHandle, VideoCanvasProps>(({
@@ -32,7 +32,8 @@ const VideoCanvas = forwardRef<VideoCanvasHandle, VideoCanvasProps>(({
   const videoRef = useRef<HTMLVideoElement>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
-  const requestRef = useRef<number>();
+  const requestRef = useRef<number | null>(null);
+  const recordingMimeTypeRef = useRef<string>('');
 
   // Initialize video
   useEffect(() => {
@@ -52,12 +53,24 @@ const VideoCanvas = forwardRef<VideoCanvasHandle, VideoCanvasProps>(({
     }
   }, [isPlaying]);
 
+  const getSupportedMimeType = () => {
+    const types = [
+        'video/mp4', 
+        'video/webm;codecs=h264', 
+        'video/webm;codecs=vp9', 
+        'video/webm'
+    ];
+    for (const type of types) {
+        if (MediaRecorder.isTypeSupported(type)) return type;
+    }
+    return '';
+  };
+
   // Seek handler exposed to parent
   useImperativeHandle(ref, () => ({
     seek: (time: number) => {
       if (videoRef.current) {
         videoRef.current.currentTime = time;
-        // Force a redraw immediately
         drawFrame(); 
       }
     },
@@ -66,30 +79,32 @@ const VideoCanvas = forwardRef<VideoCanvasHandle, VideoCanvasProps>(({
       
       // Reset video to start
       videoRef.current.currentTime = 0;
-      videoRef.current.play(); // Start playing to record
+      videoRef.current.play(); 
 
       const stream = canvasRef.current.captureStream(30); // 30 FPS
       
-      // Add audio track from video to the stream
-      // Note: captureStream might not include audio by default in some browsers unless configured
-      // We need to use Web Audio API to mix if needed, but often captureStream works if video plays sound.
-      // However, mute logic in app might interfere.
-      // For robustness, we construct a MediaStream with video track from canvas and audio track from video element (captureStream)
-      
-      // Attempt to get audio track from video element
+      // Add audio track
       let finalStream = stream;
       try {
-        // @ts-ignore - mozCaptureStream/captureStream compatibility
+        // @ts-ignore
         const videoStream = videoRef.current.captureStream ? videoRef.current.captureStream() : videoRef.current.mozCaptureStream();
         const audioTracks = videoStream.getAudioTracks();
         if (audioTracks.length > 0) {
            finalStream.addTrack(audioTracks[0]);
         }
       } catch (e) {
-        console.warn("Could not capture audio from video element for recording", e);
+        console.warn("Could not capture audio", e);
       }
 
-      const recorder = new MediaRecorder(finalStream, { mimeType: 'video/webm; codecs=vp9' });
+      const mimeType = getSupportedMimeType();
+      recordingMimeTypeRef.current = mimeType;
+      
+      if (!mimeType) {
+          console.error("No supported MediaRecorder mimeType found.");
+          return;
+      }
+
+      const recorder = new MediaRecorder(finalStream, { mimeType });
       
       chunksRef.current = [];
       recorder.ondataavailable = (e) => {
@@ -102,13 +117,18 @@ const VideoCanvas = forwardRef<VideoCanvasHandle, VideoCanvasProps>(({
     stopRecording: () => {
       return new Promise((resolve) => {
         if (!mediaRecorderRef.current) {
-          resolve(new Blob());
+          resolve({ blob: new Blob(), extension: 'webm' });
           return;
         }
 
         mediaRecorderRef.current.onstop = () => {
-          const blob = new Blob(chunksRef.current, { type: 'video/webm' });
-          resolve(blob);
+          const mimeType = recordingMimeTypeRef.current;
+          const blob = new Blob(chunksRef.current, { type: mimeType });
+          
+          let extension = 'webm';
+          if (mimeType.includes('mp4')) extension = 'mp4';
+          
+          resolve({ blob, extension });
         };
         mediaRecorderRef.current.stop();
         if(videoRef.current) videoRef.current.pause();
@@ -125,7 +145,6 @@ const VideoCanvas = forwardRef<VideoCanvasHandle, VideoCanvasProps>(({
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
-    // Set canvas dimensions to match video once metadata loaded
     if (canvas.width !== video.videoWidth || canvas.height !== video.videoHeight) {
       if (video.videoWidth) {
         canvas.width = video.videoWidth;
@@ -133,15 +152,13 @@ const VideoCanvas = forwardRef<VideoCanvasHandle, VideoCanvasProps>(({
       }
     }
 
-    // 1. Draw Video Frame
     ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
 
-    // 2. Find Active Subtitle
+    const { timingOffset } = styleConfig;
     const currentSub = subtitles.find(s => 
-      video.currentTime >= s.start && video.currentTime <= s.end
+      video.currentTime >= (s.start + timingOffset) && video.currentTime <= (s.end + timingOffset)
     );
 
-    // 3. Draw Subtitle
     if (currentSub) {
       drawText(ctx, currentSub, video.currentTime, canvas.width, canvas.height);
     }
@@ -160,30 +177,46 @@ const VideoCanvas = forwardRef<VideoCanvasHandle, VideoCanvasProps>(({
     height: number
   ) => {
     const { 
-      fontFamily, fontSize, color, strokeColor, 
-      strokeWidth, yOffset, animation, shadow, uppercase 
+      fontFamily, fontSize, color, highlightColor, strokeColor, 
+      strokeWidth, yOffset, animation, shadow, uppercase, timingOffset, animationSpeed 
     } = styleConfig;
 
-    // Scaling factor (base on 1080p width to keep consistency)
     const scale = width / 1080; 
-    const finalFontSize = fontSize * scale * 2.5; // Multiplier for visibility
+    const finalFontSize = fontSize * scale * 2.5; 
     const finalStrokeWidth = strokeWidth * scale;
 
     ctx.font = `900 ${finalFontSize}px "${fontFamily}"`;
-    ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     
-    let textToDraw = uppercase ? sub.text.toUpperCase() : sub.text;
-    const x = width / 2;
-    // Calculate Y based on percentage
+    const rawText = uppercase ? sub.text.toUpperCase() : sub.text;
+    const words = rawText.split(' ');
+    
+    let totalTextWidth = 0;
+    const wordWidths: number[] = [];
+    const spaceWidth = ctx.measureText(' ').width;
+
+    words.forEach(word => {
+      const w = ctx.measureText(word).width;
+      wordWidths.push(w);
+      totalTextWidth += w;
+    });
+    totalTextWidth += (words.length - 1) * spaceWidth;
+
+    const duration = sub.end - sub.start;
+    const timePerWord = duration / words.length;
+    
+    const effectiveStart = sub.start + timingOffset;
+    const elapsed = time - effectiveStart;
+    
+    const activeWordIndex = Math.min(Math.floor(elapsed / timePerWord), words.length - 1);
+
+    let currentX = (width - totalTextWidth) / 2;
     const y = (yOffset / 100) * height;
 
-    // Animation Calculation
     let animScale = 1;
     let animAlpha = 1;
     let animY = 0;
 
-    const progress = (time - sub.start) / (sub.end - sub.start);
     const easeOutBack = (t: number) => {
       const c1 = 1.70158;
       const c3 = c1 + 1;
@@ -191,46 +224,58 @@ const VideoCanvas = forwardRef<VideoCanvasHandle, VideoCanvasProps>(({
     }
 
     if (animation === AnimationStyle.POP) {
-      // Pop in effect (0 to 0.2s)
-      const duration = 0.15;
-      const localT = Math.min((time - sub.start) / duration, 1);
-      animScale = localT < 1 ? easeOutBack(localT) : 1;
+      // Apply animationSpeed to duration. 
+      // Speed 1 = 0.15s, Speed 2 = 0.075s, Speed 0.5 = 0.3s
+      const popDuration = 0.15 / animationSpeed;
+      const localT = Math.min(elapsed / popDuration, 1);
+      
+      animScale = localT < 1 && localT > 0 ? easeOutBack(localT) : 1;
+      if (localT < 0) animScale = 0; 
     } else if (animation === AnimationStyle.SLIDE_UP) {
-      const duration = 0.2;
-      const localT = Math.min((time - sub.start) / duration, 1);
-      animAlpha = localT;
-      animY = (1 - localT) * 50 * scale; // Slide from 50px down
+      const slideDuration = 0.2 / animationSpeed;
+      const localT = Math.min(elapsed / slideDuration, 1);
+      animAlpha = Math.max(0, localT);
+      animY = (1 - localT) * 50 * scale; 
     }
 
     ctx.save();
-    ctx.translate(x, y + animY);
+    const centerX = width / 2;
+    ctx.translate(centerX, y + animY);
     ctx.scale(animScale, animScale);
+    ctx.translate(-centerX, -(y + animY));
     ctx.globalAlpha = animAlpha;
 
-    // Shadow
-    if (shadow) {
-      ctx.shadowColor = 'rgba(0,0,0,0.7)';
-      ctx.shadowBlur = 10 * scale;
-      ctx.shadowOffsetX = 4 * scale;
-      ctx.shadowOffsetY = 4 * scale;
-    }
+    words.forEach((word, index) => {
+        const isHighlight = index === activeWordIndex;
+        
+        ctx.save();
+        
+        if (shadow) {
+            ctx.shadowColor = 'rgba(0,0,0,0.7)';
+            ctx.shadowBlur = 10 * scale;
+            ctx.shadowOffsetX = 4 * scale;
+            ctx.shadowOffsetY = 4 * scale;
+        }
 
-    // Stroke
-    if (strokeWidth > 0) {
-      ctx.strokeStyle = strokeColor;
-      ctx.lineWidth = finalStrokeWidth;
-      ctx.lineJoin = 'round';
-      ctx.strokeText(textToDraw, 0, 0);
-    }
+        if (strokeWidth > 0) {
+            ctx.strokeStyle = strokeColor;
+            ctx.lineWidth = finalStrokeWidth;
+            ctx.lineJoin = 'round';
+            ctx.strokeText(word, currentX, y);
+        }
 
-    // Fill
-    ctx.fillStyle = color;
-    ctx.fillText(textToDraw, 0, 0);
+        ctx.fillStyle = isHighlight ? highlightColor : color;
+        ctx.shadowColor = 'transparent'; 
+        ctx.fillText(word, currentX, y);
+        
+        ctx.restore();
+
+        currentX += wordWidths[index] + spaceWidth;
+    });
 
     ctx.restore();
   };
 
-  // Sync loop
   useEffect(() => {
     requestRef.current = requestAnimationFrame(drawFrame);
     return () => {
@@ -249,7 +294,7 @@ const VideoCanvas = forwardRef<VideoCanvasHandle, VideoCanvasProps>(({
             onVideoEnd();
         }}
         playsInline
-        crossOrigin="anonymous" // Important for canvas if using generic assets, though blobs are fine
+        crossOrigin="anonymous" 
       />
       <canvas 
         ref={canvasRef} 

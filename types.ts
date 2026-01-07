@@ -30,12 +30,15 @@ export interface StyleConfig {
   fontFamily: FontStyle;
   fontSize: number;
   color: string;
+  highlightColor: string; // New field for active word
   strokeColor: string;
   strokeWidth: number;
   yOffset: number; // Percentage from top (0-100)
   animation: AnimationStyle;
   shadow: boolean;
   uppercase: boolean;
+  timingOffset: number; // Seconds to shift subtitle start/end
+  animationSpeed: number; // Multiplier for animation duration
 }
 
 export type ProcessingStatus = 'idle' | 'extracting_audio' | 'transcribing' | 'ready' | 'exporting';

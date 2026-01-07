@@ -1,7 +1,7 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { StyleConfig, SubtitleChunk, FontStyle, AnimationStyle, ProcessingStatus } from '../types';
 import { FONTS, ANIMATIONS } from '../constants';
-import { Play, Pause, Download, Wand2 } from 'lucide-react';
+import { Play, Pause, Download, Wand2, Split, Scissors } from 'lucide-react';
 
 interface ControlsProps {
   styleConfig: StyleConfig;
@@ -13,6 +13,7 @@ interface ControlsProps {
   isPlaying: boolean;
   onTogglePlay: () => void;
   onSeek: (time: number) => void;
+  onSplit: (id: string, cursorIndex: number) => void;
   status: ProcessingStatus;
   onExport: () => void;
 }
@@ -27,10 +28,12 @@ const Controls: React.FC<ControlsProps> = ({
   isPlaying,
   onTogglePlay,
   onSeek,
+  onSplit,
   status,
   onExport
 }) => {
   const activeSubIndex = subtitles.findIndex(s => currentTime >= s.start && currentTime <= s.end);
+  const [cursorPos, setCursorPos] = useState<number | null>(null);
 
   const handleSubChange = (id: string, newText: string) => {
     setSubtitles(subtitles.map(s => s.id === id ? { ...s, text: newText } : s));
@@ -126,6 +129,30 @@ const Controls: React.FC<ControlsProps> = ({
              </div>
           </div>
 
+          <div className="grid grid-cols-2 gap-3">
+             <div>
+                <label className="text-xs text-slate-400 mb-1 block">Highlight Color</label>
+                <div className="flex items-center bg-slate-800 border border-slate-600 rounded p-1">
+                  <input 
+                    type="color" 
+                    className="w-8 h-8 rounded bg-transparent cursor-pointer"
+                    value={styleConfig.highlightColor}
+                    onChange={(e) => setStyleConfig({...styleConfig, highlightColor: e.target.value})}
+                  />
+                  <span className="ml-2 text-xs font-mono">{styleConfig.highlightColor}</span>
+                </div>
+             </div>
+              <div>
+                <label className="text-xs text-slate-400 mb-1 block">Font Size</label>
+                <input 
+                 type="number" 
+                 value={styleConfig.fontSize}
+                 onChange={(e) => setStyleConfig({...styleConfig, fontSize: parseInt(e.target.value)})}
+                 className="w-full bg-slate-800 border border-slate-600 rounded p-2 text-sm text-white focus:border-purple-500 outline-none"
+               />
+             </div>
+          </div>
+
           <div>
              <label className="text-xs text-slate-400 mb-1 block flex justify-between">
                 <span>Vertical Position</span>
@@ -139,20 +166,48 @@ const Controls: React.FC<ControlsProps> = ({
                className="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-purple-500"
              />
           </div>
-          
-           <div>
-             <label className="text-xs text-slate-400 mb-1 block flex justify-between">
-                <span>Font Size</span>
-                <span>{styleConfig.fontSize}px</span>
-             </label>
-             <input 
-               type="range" 
-               min="20" max="100" 
-               value={styleConfig.fontSize}
-               onChange={(e) => setStyleConfig({...styleConfig, fontSize: parseInt(e.target.value)})}
-               className="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-purple-500"
-             />
-          </div>
+
+           {/* TIMING CONTROLS */}
+           <div className="bg-slate-800/50 p-3 rounded-lg border border-slate-700 space-y-4">
+              <div>
+                <label className="text-xs text-slate-400 mb-1 block flex justify-between">
+                    <span>Sync Offset</span>
+                    <span className={styleConfig.timingOffset !== 0 ? "text-purple-400 font-bold" : ""}>
+                        {styleConfig.timingOffset > 0 ? '+' : ''}{styleConfig.timingOffset.toFixed(2)}s
+                    </span>
+                </label>
+                <div className="flex items-center gap-2">
+                    <span className="text-xs text-slate-500 font-mono">-1.0s</span>
+                    <input 
+                    type="range" 
+                    min="-1" max="1" step="0.05"
+                    value={styleConfig.timingOffset}
+                    onChange={(e) => setStyleConfig({...styleConfig, timingOffset: parseFloat(e.target.value)})}
+                    className="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-purple-500"
+                    />
+                    <span className="text-xs text-slate-500 font-mono">+1.0s</span>
+                </div>
+              </div>
+
+              <div>
+                <label className="text-xs text-slate-400 mb-1 block flex justify-between">
+                    <span>Animation Speed</span>
+                    <span className="text-white font-mono">{styleConfig.animationSpeed.toFixed(1)}x</span>
+                </label>
+                <div className="flex items-center gap-2">
+                    <span className="text-xs text-slate-500 font-mono">0.5x</span>
+                    <input 
+                    type="range" 
+                    min="0.5" max="3" step="0.1"
+                    value={styleConfig.animationSpeed}
+                    onChange={(e) => setStyleConfig({...styleConfig, animationSpeed: parseFloat(e.target.value)})}
+                    className="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-purple-500"
+                    />
+                    <span className="text-xs text-slate-500 font-mono">3.0x</span>
+                </div>
+              </div>
+           </div>
+
         </section>
 
         <hr className="border-slate-700" />
@@ -165,7 +220,7 @@ const Controls: React.FC<ControlsProps> = ({
                <div 
                   key={sub.id} 
                   onClick={() => onSeek(sub.start)}
-                  className={`p-3 rounded-lg border transition-all cursor-pointer group ${
+                  className={`relative p-3 rounded-lg border transition-all cursor-pointer group ${
                     idx === activeSubIndex 
                       ? 'bg-purple-900/30 border-purple-500' 
                       : 'bg-slate-800 border-slate-700 hover:border-slate-500'
@@ -175,13 +230,30 @@ const Controls: React.FC<ControlsProps> = ({
                    <span>{formatTime(sub.start)}</span>
                    <span>{formatTime(sub.end)}</span>
                  </div>
-                 <textarea 
-                   rows={2}
-                   className="w-full bg-transparent text-white resize-none outline-none text-sm font-medium"
-                   value={sub.text}
-                   onChange={(e) => handleSubChange(sub.id, e.target.value)}
-                   onClick={(e) => e.stopPropagation()} 
-                 />
+                 
+                 <div className="flex gap-2">
+                    <textarea 
+                      rows={2}
+                      className="w-full bg-transparent text-white resize-none outline-none text-sm font-medium"
+                      value={sub.text}
+                      onChange={(e) => handleSubChange(sub.id, e.target.value)}
+                      onSelect={(e) => setCursorPos(e.currentTarget.selectionStart)}
+                      onClick={(e) => e.stopPropagation()} 
+                    />
+                    
+                    {idx === activeSubIndex && (
+                       <button
+                         title="Split at cursor"
+                         onClick={(e) => {
+                           e.stopPropagation();
+                           if (cursorPos !== null) onSplit(sub.id, cursorPos);
+                         }}
+                         className="self-start p-1.5 rounded bg-slate-700 hover:bg-purple-600 hover:text-white text-slate-400 transition-colors"
+                       >
+                         <Scissors size={14} />
+                       </button>
+                    )}
+                 </div>
                </div>
              ))}
              {subtitles.length === 0 && (

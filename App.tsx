@@ -77,12 +77,48 @@ const App: React.FC = () => {
   const handleVideoEnd = async () => {
     if (status === 'exporting' && canvasRef.current) {
         setIsPlaying(false);
-        const blob = await canvasRef.current.stopRecording();
-        downloadBlob(blob, `shorts-baker-${Date.now()}.webm`);
+        const { blob, extension } = await canvasRef.current.stopRecording();
+        downloadBlob(blob, `shorts-baker-${Date.now()}.${extension}`);
         setStatus('ready');
     } else {
         setIsPlaying(false);
     }
+  };
+
+  const handleSplitSubtitle = (id: string, cursorIndex: number) => {
+    const index = subtitles.findIndex(s => s.id === id);
+    if (index === -1) return;
+    
+    const sub = subtitles[index];
+    
+    // Safety checks
+    if (cursorIndex <= 0 || cursorIndex >= sub.text.length) return;
+
+    const text1 = sub.text.substring(0, cursorIndex).trim();
+    const text2 = sub.text.substring(cursorIndex).trim();
+    
+    if (!text1 || !text2) return; // Don't split if one side is empty
+
+    const totalDuration = sub.end - sub.start;
+    const splitRatio = cursorIndex / sub.text.length;
+    const splitTime = sub.start + (totalDuration * splitRatio);
+
+    const newSub1: SubtitleChunk = {
+        ...sub,
+        text: text1,
+        end: splitTime
+    };
+
+    const newSub2: SubtitleChunk = {
+        id: `sub-${Date.now()}-split`,
+        text: text2,
+        start: splitTime,
+        end: sub.end
+    };
+
+    const newSubtitles = [...subtitles];
+    newSubtitles.splice(index, 1, newSub1, newSub2);
+    setSubtitles(newSubtitles);
   };
 
   return (
@@ -173,6 +209,7 @@ const App: React.FC = () => {
                 setCurrentTime(t);
                 canvasRef.current?.seek(t);
               }}
+              onSplit={handleSplitSubtitle}
               status={status}
               onExport={handleExport}
             />

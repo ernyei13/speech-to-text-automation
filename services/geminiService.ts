@@ -1,7 +1,7 @@
 import { GoogleGenAI, Type } from "@google/genai";
 import { SubtitleChunk } from "../types";
 
-const MODEL_NAME = "gemini-flash-latest"; 
+const MODEL_NAME = "gemini-3-flash-preview"; 
 
 export const transcribeAudio = async (base64Audio: string): Promise<SubtitleChunk[]> => {
   if (!process.env.API_KEY) {
