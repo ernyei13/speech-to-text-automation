@@ -1,0 +1,5 @@
+{
+  "name": "ShortsBaker AI",
+  "description": "Upload videos, transcribe audio using Gemini, and bake in stylish, popping captions for social media shorts.",
+  "requestFramePermissions": []
+}

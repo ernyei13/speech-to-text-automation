@@ -1,0 +1,41 @@
+export interface SubtitleChunk {
+  id: string;
+  text: string;
+  start: number; // seconds
+  end: number; // seconds
+}
+
+export enum FontStyle {
+  CLASSIC = 'Inter',
+  BOLD = 'Montserrat',
+  COMIC = 'Bangers',
+  MARKER = 'Permanent Marker'
+}
+
+export enum AnimationStyle {
+  NONE = 'none',
+  POP = 'pop',
+  SLIDE_UP = 'slide_up',
+  TYPEWRITER = 'typewriter'
+}
+
+export enum TextPosition {
+  TOP = 'top',
+  CENTER = 'center',
+  BOTTOM = 'bottom',
+  CUSTOM = 'custom'
+}
+
+export interface StyleConfig {
+  fontFamily: FontStyle;
+  fontSize: number;
+  color: string;
+  strokeColor: string;
+  strokeWidth: number;
+  yOffset: number; // Percentage from top (0-100)
+  animation: AnimationStyle;
+  shadow: boolean;
+  uppercase: boolean;
+}
+
+export type ProcessingStatus = 'idle' | 'extracting_audio' | 'transcribing' | 'ready' | 'exporting';
