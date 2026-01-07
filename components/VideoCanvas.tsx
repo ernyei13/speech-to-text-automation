@@ -169,6 +169,27 @@ const VideoCanvas = forwardRef<VideoCanvasHandle, VideoCanvasProps>(({
     }
   };
 
+  // Easing functions
+  const easeOutBack = (t: number) => {
+    const c1 = 1.70158;
+    const c3 = c1 + 1;
+    return 1 + c3 * Math.pow(t - 1, 3) + c1 * Math.pow(t - 1, 2);
+  };
+
+  const easeOutBounce = (x: number): number => {
+    const n1 = 7.5625;
+    const d1 = 2.75;
+    if (x < 1 / d1) {
+      return n1 * x * x;
+    } else if (x < 2 / d1) {
+      return n1 * (x -= 1.5 / d1) * x + 0.75;
+    } else if (x < 2.5 / d1) {
+      return n1 * (x -= 2.25 / d1) * x + 0.9375;
+    } else {
+      return n1 * (x -= 2.625 / d1) * x + 0.984375;
+    }
+  };
+
   const drawText = (
     ctx: CanvasRenderingContext2D, 
     sub: SubtitleChunk, 
@@ -213,46 +234,90 @@ const VideoCanvas = forwardRef<VideoCanvasHandle, VideoCanvasProps>(({
     let currentX = (width - totalTextWidth) / 2;
     const y = (yOffset / 100) * height;
 
-    let animScale = 1;
-    let animAlpha = 1;
-    let animY = 0;
-
-    const easeOutBack = (t: number) => {
-      const c1 = 1.70158;
-      const c3 = c1 + 1;
-      return 1 + c3 * Math.pow(t - 1, 3) + c1 * Math.pow(t - 1, 2);
-    }
+    // --- Global Entry Animation Calculations ---
+    let containerScale = 1;
+    let containerAlpha = 1;
+    let containerY = 0;
 
     if (animation === AnimationStyle.POP) {
-      // Apply animationSpeed to duration. 
-      // Speed 1 = 0.15s, Speed 2 = 0.075s, Speed 0.5 = 0.3s
-      const popDuration = 0.15 / animationSpeed;
+      const popDuration = 0.2 / animationSpeed;
       const localT = Math.min(elapsed / popDuration, 1);
-      
-      animScale = localT < 1 && localT > 0 ? easeOutBack(localT) : 1;
-      if (localT < 0) animScale = 0; 
+      containerScale = localT < 1 && localT > 0 ? easeOutBack(localT) : 1;
+      if (localT <= 0) containerScale = 0; 
+
     } else if (animation === AnimationStyle.SLIDE_UP) {
       const slideDuration = 0.2 / animationSpeed;
       const localT = Math.min(elapsed / slideDuration, 1);
-      animAlpha = Math.max(0, localT);
-      animY = (1 - localT) * 50 * scale; 
+      containerAlpha = Math.max(0, localT);
+      containerY = (1 - easeOutBack(localT)) * 50 * scale; 
+
+    } else if (animation === AnimationStyle.FADE) {
+      const fadeDuration = 0.3 / animationSpeed;
+      const localT = Math.min(elapsed / fadeDuration, 1);
+      containerAlpha = localT;
+
+    } else if (animation === AnimationStyle.BOUNCE) {
+      const bounceDuration = 0.5 / animationSpeed;
+      const localT = Math.min(elapsed / bounceDuration, 1);
+      containerY = (1 - easeOutBounce(localT)) * -100 * scale;
+      containerAlpha = localT > 0 ? 1 : 0;
     }
 
     ctx.save();
+    
+    // Apply Global Transformations (Centered)
     const centerX = width / 2;
-    ctx.translate(centerX, y + animY);
-    ctx.scale(animScale, animScale);
-    ctx.translate(-centerX, -(y + animY));
-    ctx.globalAlpha = animAlpha;
+    ctx.translate(centerX, y + containerY);
+    ctx.scale(containerScale, containerScale);
+    ctx.translate(-centerX, -(y + containerY));
+    ctx.globalAlpha = containerAlpha;
 
+    // --- Draw Words ---
     words.forEach((word, index) => {
+        // "Word Print" Logic: Hide future words completely
+        if (animation === AnimationStyle.WORD_PRINT && index > activeWordIndex) {
+            currentX += wordWidths[index] + spaceWidth;
+            return;
+        }
+
         const isHighlight = index === activeWordIndex;
         
         ctx.save();
         
+        let wordScale = 1;
+        
+        // Active Word Pop Effect (Applied to all animations for style)
+        if (isHighlight) {
+            // Calculate a mini pop for the word when it becomes active
+            const wordElapsed = elapsed - (index * timePerWord);
+            const popDuration = 0.15;
+            const t = Math.min(Math.max(wordElapsed / popDuration, 0), 1);
+            
+            // Pop up to 1.2 then back to 1.1 (sustained highlight size)
+            // Or just sustain 1.1x while active
+            wordScale = 1.1 + (Math.sin(t * Math.PI) * 0.1); 
+            
+            // For WORD_PRINT, emphasize the entry more
+            if (animation === AnimationStyle.WORD_PRINT) {
+               wordScale = easeOutBack(t);
+            }
+        } else {
+            // In Word Print, past words can settle back to 1
+            wordScale = 1;
+        }
+
+        // Apply Word-Level Transforms
+        // We pivot around the center of the specific word
+        const wordCenterX = currentX + (wordWidths[index] / 2);
+        const wordCenterY = y;
+        
+        ctx.translate(wordCenterX, wordCenterY);
+        ctx.scale(wordScale, wordScale);
+        ctx.translate(-wordCenterX, -wordCenterY);
+
         if (shadow) {
-            ctx.shadowColor = 'rgba(0,0,0,0.7)';
-            ctx.shadowBlur = 10 * scale;
+            ctx.shadowColor = 'rgba(0,0,0,0.8)';
+            ctx.shadowBlur = 8 * scale;
             ctx.shadowOffsetX = 4 * scale;
             ctx.shadowOffsetY = 4 * scale;
         }
@@ -265,6 +330,7 @@ const VideoCanvas = forwardRef<VideoCanvasHandle, VideoCanvasProps>(({
         }
 
         ctx.fillStyle = isHighlight ? highlightColor : color;
+        // Remove shadow for fill to keep text crisp
         ctx.shadowColor = 'transparent'; 
         ctx.fillText(word, currentX, y);
         

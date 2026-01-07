@@ -12,13 +12,18 @@ export const transcribeAudio = async (base64Audio: string): Promise<SubtitleChun
 
   const prompt = `
     Transcribe the following audio for use in a fast-paced social media video.
-    Split the transcription into short, punchy segments (approx 2-5 words max per segment).
+    Split the transcription into short, punchy segments (approx 1-3 words max per segment).
+    
+    CRITICAL INSTRUCTIONS FOR TIMING:
+    1. Timestamps must be extremely precise to the millisecond of the spoken utterance.
+    2. Do NOT include silence before or after the word in the start/end times.
+    3. Ensure no overlap between segments.
+    4. If there is a pause, leave a gap in the timeline.
+
     Return a JSON array where each object has:
     - "text": The text content.
     - "start": Start time in seconds (number).
     - "end": End time in seconds (number).
-    
-    Ensure timing is precise.
   `;
 
   try {

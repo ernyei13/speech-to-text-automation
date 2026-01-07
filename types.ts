@@ -16,7 +16,9 @@ export enum AnimationStyle {
   NONE = 'none',
   POP = 'pop',
   SLIDE_UP = 'slide_up',
-  TYPEWRITER = 'typewriter'
+  FADE = 'fade',
+  BOUNCE = 'bounce',
+  WORD_PRINT = 'word_print'
 }
 
 export enum TextPosition {

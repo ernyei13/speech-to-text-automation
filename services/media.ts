@@ -1,10 +1,10 @@
 /**
- * Extracts audio from a video file and returns it as a base64 string (WAV format ideally, or just raw bytes appropriately encoded).
- * For simplicity and browser compatibility, we'll extract the audio track into an AudioBuffer, then encode to WAV.
+ * Extracts audio from a video file and returns it as a base64 string (WAV format) and the raw AudioBuffer.
  */
-export const extractAudioFromVideo = async (videoFile: File): Promise<string> => {
+export const extractAudioFromVideo = async (videoFile: File): Promise<{ base64Audio: string, audioBuffer: AudioBuffer }> => {
   const arrayBuffer = await videoFile.arrayBuffer();
-  const audioContext = new AudioContext();
+  const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+  const audioContext = new AudioContextClass();
   
   // Decode the audio data from the video file
   const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
@@ -16,12 +16,33 @@ export const extractAudioFromVideo = async (videoFile: File): Promise<string> =>
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onloadend = () => {
-      const base64String = (reader.result as string).split(',')[1];
-      resolve(base64String);
+      const result = reader.result as string;
+      const base64String = result.split(',')[1];
+      resolve({ base64Audio: base64String, audioBuffer });
     };
     reader.onerror = reject;
     reader.readAsDataURL(wavBlob);
   });
+};
+
+/**
+ * Generates a normalized array of peaks from an AudioBuffer for visualization.
+ */
+export const getWaveformData = (audioBuffer: AudioBuffer, samples: number): number[] => {
+  const rawData = audioBuffer.getChannelData(0); // Left channel
+  const blockSize = Math.floor(rawData.length / samples);
+  const filteredData = [];
+  for (let i = 0; i < samples; i++) {
+    let blockStart = i * blockSize;
+    let sum = 0;
+    for (let j = 0; j < blockSize; j++) {
+      sum = sum + Math.abs(rawData[blockStart + j]);
+    }
+    filteredData.push(sum / blockSize);
+  }
+  // Normalize
+  const multiplier = Math.pow(Math.max(...filteredData), -1);
+  return filteredData.map(n => n * multiplier);
 };
 
 // Helper to convert AudioBuffer to WAV

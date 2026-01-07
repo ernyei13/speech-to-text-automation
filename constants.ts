@@ -26,4 +26,7 @@ export const ANIMATIONS = [
   { label: 'None', value: AnimationStyle.NONE },
   { label: 'Pop In', value: AnimationStyle.POP },
   { label: 'Slide Up', value: AnimationStyle.SLIDE_UP },
+  { label: 'Bounce', value: AnimationStyle.BOUNCE },
+  { label: 'Fade In', value: AnimationStyle.FADE },
+  { label: 'Word by Word', value: AnimationStyle.WORD_PRINT },
 ];

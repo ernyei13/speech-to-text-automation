@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { StyleConfig, SubtitleChunk, FontStyle, AnimationStyle, ProcessingStatus } from '../types';
 import { FONTS, ANIMATIONS } from '../constants';
-import { Play, Pause, Download, Wand2, Split, Scissors } from 'lucide-react';
+import { Play, Pause, Download, Wand2, Scissors, FastForward, Rewind } from 'lucide-react';
 
 interface ControlsProps {
   styleConfig: StyleConfig;
@@ -39,6 +39,15 @@ const Controls: React.FC<ControlsProps> = ({
     setSubtitles(subtitles.map(s => s.id === id ? { ...s, text: newText } : s));
   };
 
+  const handleTimeUpdate = (id: string, field: 'start' | 'end', value: number) => {
+    setSubtitles(subtitles.map(s => {
+      if (s.id === id) {
+        return { ...s, [field]: value };
+      }
+      return s;
+    }));
+  };
+
   const handleSeek = (e: React.ChangeEvent<HTMLInputElement>) => {
     onSeek(parseFloat(e.target.value));
   };
@@ -51,7 +60,7 @@ const Controls: React.FC<ControlsProps> = ({
   };
 
   return (
-    <div className="flex flex-col h-full bg-slate-900 border-l border-slate-700 w-full lg:w-96">
+    <div className="flex flex-col h-full bg-slate-900 w-full">
       
       {/* Header */}
       <div className="p-4 border-b border-slate-700 flex justify-between items-center bg-slate-800">
@@ -77,7 +86,7 @@ const Controls: React.FC<ControlsProps> = ({
         
         {/* Style Controls */}
         <section className="space-y-4">
-          <h3 className="text-sm uppercase tracking-wider text-slate-400 font-semibold">Typography</h3>
+          <h3 className="text-sm uppercase tracking-wider text-slate-400 font-semibold">Style & Animation</h3>
           
           <div className="grid grid-cols-2 gap-3">
             <div>
@@ -108,47 +117,45 @@ const Controls: React.FC<ControlsProps> = ({
                 <div className="flex items-center bg-slate-800 border border-slate-600 rounded p-1">
                   <input 
                     type="color" 
-                    className="w-8 h-8 rounded bg-transparent cursor-pointer"
+                    className="w-full h-8 rounded bg-transparent cursor-pointer"
                     value={styleConfig.color}
                     onChange={(e) => setStyleConfig({...styleConfig, color: e.target.value})}
                   />
-                  <span className="ml-2 text-xs font-mono">{styleConfig.color}</span>
                 </div>
              </div>
              <div>
-                <label className="text-xs text-slate-400 mb-1 block">Stroke Color</label>
+                <label className="text-xs text-slate-400 mb-1 block">Stroke</label>
                 <div className="flex items-center bg-slate-800 border border-slate-600 rounded p-1">
                   <input 
                     type="color" 
-                    className="w-8 h-8 rounded bg-transparent cursor-pointer"
+                    className="w-full h-8 rounded bg-transparent cursor-pointer"
                     value={styleConfig.strokeColor}
                     onChange={(e) => setStyleConfig({...styleConfig, strokeColor: e.target.value})}
                   />
-                  <span className="ml-2 text-xs font-mono">{styleConfig.strokeColor}</span>
                 </div>
              </div>
           </div>
 
           <div className="grid grid-cols-2 gap-3">
              <div>
-                <label className="text-xs text-slate-400 mb-1 block">Highlight Color</label>
+                <label className="text-xs text-slate-400 mb-1 block">Highlight</label>
                 <div className="flex items-center bg-slate-800 border border-slate-600 rounded p-1">
                   <input 
                     type="color" 
-                    className="w-8 h-8 rounded bg-transparent cursor-pointer"
+                    className="w-full h-8 rounded bg-transparent cursor-pointer"
                     value={styleConfig.highlightColor}
                     onChange={(e) => setStyleConfig({...styleConfig, highlightColor: e.target.value})}
                   />
-                  <span className="ml-2 text-xs font-mono">{styleConfig.highlightColor}</span>
                 </div>
              </div>
               <div>
-                <label className="text-xs text-slate-400 mb-1 block">Font Size</label>
+                <label className="text-xs text-slate-400 mb-1 block">Size: {styleConfig.fontSize}px</label>
                 <input 
-                 type="number" 
+                 type="range"
+                 min="20" max="100" 
                  value={styleConfig.fontSize}
                  onChange={(e) => setStyleConfig({...styleConfig, fontSize: parseInt(e.target.value)})}
-                 className="w-full bg-slate-800 border border-slate-600 rounded p-2 text-sm text-white focus:border-purple-500 outline-none"
+                 className="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-purple-500"
                />
              </div>
           </div>
@@ -167,46 +174,19 @@ const Controls: React.FC<ControlsProps> = ({
              />
           </div>
 
-           {/* TIMING CONTROLS */}
-           <div className="bg-slate-800/50 p-3 rounded-lg border border-slate-700 space-y-4">
-              <div>
-                <label className="text-xs text-slate-400 mb-1 block flex justify-between">
-                    <span>Sync Offset</span>
-                    <span className={styleConfig.timingOffset !== 0 ? "text-purple-400 font-bold" : ""}>
-                        {styleConfig.timingOffset > 0 ? '+' : ''}{styleConfig.timingOffset.toFixed(2)}s
-                    </span>
-                </label>
-                <div className="flex items-center gap-2">
-                    <span className="text-xs text-slate-500 font-mono">-1.0s</span>
-                    <input 
-                    type="range" 
-                    min="-1" max="1" step="0.05"
-                    value={styleConfig.timingOffset}
-                    onChange={(e) => setStyleConfig({...styleConfig, timingOffset: parseFloat(e.target.value)})}
-                    className="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-purple-500"
-                    />
-                    <span className="text-xs text-slate-500 font-mono">+1.0s</span>
-                </div>
-              </div>
-
-              <div>
-                <label className="text-xs text-slate-400 mb-1 block flex justify-between">
-                    <span>Animation Speed</span>
-                    <span className="text-white font-mono">{styleConfig.animationSpeed.toFixed(1)}x</span>
-                </label>
-                <div className="flex items-center gap-2">
-                    <span className="text-xs text-slate-500 font-mono">0.5x</span>
-                    <input 
-                    type="range" 
-                    min="0.5" max="3" step="0.1"
-                    value={styleConfig.animationSpeed}
-                    onChange={(e) => setStyleConfig({...styleConfig, animationSpeed: parseFloat(e.target.value)})}
-                    className="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-purple-500"
-                    />
-                    <span className="text-xs text-slate-500 font-mono">3.0x</span>
-                </div>
-              </div>
-           </div>
+          <div>
+            <label className="text-xs text-slate-400 mb-1 block flex justify-between">
+                <span>Animation Speed</span>
+                <span className="text-white font-mono">{styleConfig.animationSpeed.toFixed(1)}x</span>
+            </label>
+            <input 
+              type="range" 
+              min="0.5" max="3" step="0.1"
+              value={styleConfig.animationSpeed}
+              onChange={(e) => setStyleConfig({...styleConfig, animationSpeed: parseFloat(e.target.value)})}
+              className="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-purple-500"
+            />
+          </div>
 
         </section>
 
@@ -215,26 +195,45 @@ const Controls: React.FC<ControlsProps> = ({
         {/* Subtitles List */}
         <section className="space-y-2">
            <h3 className="text-sm uppercase tracking-wider text-slate-400 font-semibold mb-2">Transcript</h3>
-           <div className="space-y-2">
+           <div className="space-y-3">
              {subtitles.map((sub, idx) => (
                <div 
                   key={sub.id} 
                   onClick={() => onSeek(sub.start)}
                   className={`relative p-3 rounded-lg border transition-all cursor-pointer group ${
                     idx === activeSubIndex 
-                      ? 'bg-purple-900/30 border-purple-500' 
-                      : 'bg-slate-800 border-slate-700 hover:border-slate-500'
+                      ? 'bg-purple-900/20 border-purple-500/50' 
+                      : 'bg-slate-800 border-slate-700 hover:border-slate-600'
                   }`}
                >
-                 <div className="flex justify-between text-xs text-slate-500 mb-1 font-mono">
-                   <span>{formatTime(sub.start)}</span>
-                   <span>{formatTime(sub.end)}</span>
+                 {/* Precision Time Controls (Restored) */}
+                 <div className="flex gap-2 mb-2">
+                    <div className="flex items-center bg-slate-900/50 rounded px-1.5 py-0.5 border border-slate-700/50">
+                        <span className="text-[10px] text-slate-500 mr-1">IN</span>
+                        <input 
+                            type="number" step="0.1" 
+                            className="bg-transparent w-12 text-xs text-green-400 font-mono outline-none"
+                            value={sub.start}
+                            onChange={(e) => handleTimeUpdate(sub.id, 'start', parseFloat(e.target.value))}
+                            onClick={(e) => e.stopPropagation()}
+                        />
+                    </div>
+                    <div className="flex items-center bg-slate-900/50 rounded px-1.5 py-0.5 border border-slate-700/50">
+                        <span className="text-[10px] text-slate-500 mr-1">OUT</span>
+                        <input 
+                            type="number" step="0.1" 
+                            className="bg-transparent w-12 text-xs text-red-400 font-mono outline-none"
+                            value={sub.end}
+                            onChange={(e) => handleTimeUpdate(sub.id, 'end', parseFloat(e.target.value))}
+                            onClick={(e) => e.stopPropagation()}
+                        />
+                    </div>
                  </div>
-                 
+
                  <div className="flex gap-2">
                     <textarea 
                       rows={2}
-                      className="w-full bg-transparent text-white resize-none outline-none text-sm font-medium"
+                      className="w-full bg-transparent text-white resize-none outline-none text-sm font-medium leading-tight"
                       value={sub.text}
                       onChange={(e) => handleSubChange(sub.id, e.target.value)}
                       onSelect={(e) => setCursorPos(e.currentTarget.selectionStart)}
@@ -258,7 +257,7 @@ const Controls: React.FC<ControlsProps> = ({
              ))}
              {subtitles.length === 0 && (
                <div className="text-slate-500 text-sm text-center italic py-4">
-                 No subtitles generated yet.
+                 Upload a video to see subtitles.
                </div>
              )}
            </div>
@@ -267,28 +266,32 @@ const Controls: React.FC<ControlsProps> = ({
 
       {/* Playback Controls (Sticky Bottom) */}
       <div className="p-4 bg-slate-800 border-t border-slate-700">
-         <div className="flex items-center gap-4 mb-2">
-            <button 
+         <div className="flex items-center justify-center gap-6 mb-2">
+             <button onClick={() => onSeek(Math.max(0, currentTime - 5))} className="text-slate-400 hover:text-white">
+                <Rewind size={20} />
+             </button>
+             <button 
               onClick={onTogglePlay}
-              className="w-10 h-10 rounded-full bg-white text-slate-900 flex items-center justify-center hover:bg-gray-200 transition-colors"
+              className="w-12 h-12 rounded-full bg-purple-500 hover:bg-purple-600 text-white flex items-center justify-center shadow-lg transition-transform hover:scale-105"
             >
-              {isPlaying ? <Pause className="fill-current" size={20} /> : <Play className="fill-current ml-1" size={20} />}
+              {isPlaying ? <Pause className="fill-current" size={24} /> : <Play className="fill-current ml-1" size={24} />}
             </button>
-            <div className="flex-1">
-               <input 
-                  type="range"
-                  min="0"
-                  max={duration || 100}
-                  step="0.1"
-                  value={currentTime}
-                  onChange={handleSeek}
-                  className="w-full h-2 bg-slate-600 rounded-lg appearance-none cursor-pointer accent-purple-500"
-               />
-               <div className="flex justify-between text-xs text-slate-400 font-mono mt-1">
-                 <span>{formatTime(currentTime)}</span>
-                 <span>{formatTime(duration)}</span>
-               </div>
-            </div>
+            <button onClick={() => onSeek(Math.min(duration, currentTime + 5))} className="text-slate-400 hover:text-white">
+                <FastForward size={20} />
+             </button>
+         </div>
+         <div className="flex items-center gap-3">
+             <span className="text-xs text-slate-400 font-mono w-12 text-right">{formatTime(currentTime)}</span>
+             <input 
+                type="range"
+                min="0"
+                max={duration || 100}
+                step="0.01"
+                value={currentTime}
+                onChange={handleSeek}
+                className="flex-1 h-1 bg-slate-600 rounded-lg appearance-none cursor-pointer accent-purple-500"
+             />
+             <span className="text-xs text-slate-400 font-mono w-12">{formatTime(duration)}</span>
          </div>
       </div>
     </div>
